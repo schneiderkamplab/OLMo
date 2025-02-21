@@ -54,6 +54,10 @@ from olmo.util import (
 log = logging.getLogger("train")
 
 
+def count_trainable_params(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
 def main(cfg: TrainConfig) -> None:
     # Ensure run name set.
     if cfg.run_name is None:
@@ -154,6 +158,16 @@ def main(cfg: TrainConfig) -> None:
         bitlinearize(olmo_model, replacements=[x.__dict__ for x in cfg.bitlinear])
         log.info(f"Bilinear model: {olmo_model}")
 
+    if cfg.model.freeze is not None:
+        log.info(f"Total number of trainable parameters before freezing: {count_trainable_params(olmo_model)}")
+        log.info(f"Freezing model parameters: {cfg.model.freeze}")
+        for name, param in olmo_model.named_parameters():
+            for pattern in cfg.model.freeze:
+                if re.match(pattern, name):
+                    param.requires_grad = False
+                    log.info(f"Froze parameter {name}")
+        log.info(f"Total number of trainable parameters after freezing: {count_trainable_params(olmo_model)}")
+
     # Compile one block at a time.
     if cfg.compile is not None:
         if cfg.model.block_group_size != 1:
@@ -250,14 +264,6 @@ def main(cfg: TrainConfig) -> None:
     optim = build_optimizer(cfg, dist_model)
     scheduler = build_scheduler(cfg)
 
-    if cfg.model.freeze is not None:
-        log.info(f"Freezing model parameters: {cfg.model.freeze}")
-        for name, param in dist_model.named_parameters():
-            for pattern in cfg.model.freeze:
-                if re.match(pattern, name):
-                    param.requires_grad = False
-                    log.info(f"Froze parameter {name}")
-
     # Data indices file.
     indices_file: Optional[TextIO] = None
     if cfg.save_data_indices:
@@ -266,6 +272,8 @@ def main(cfg: TrainConfig) -> None:
             raise OLMoConfigurationError(f"{indices_file_path} already exists, use --save_overwrite to overwrite")
         indices_file_path.parent.mkdir(exist_ok=True, parents=True)
         indices_file = gzip.open(indices_file_path, "wt")
+
+    log.info(f"Total number of trainable parameters: {count_trainable_params(olmo_model)}")
 
     # Consolidate components into `Trainer` object.
     with Trainer(
