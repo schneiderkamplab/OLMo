@@ -5,6 +5,7 @@ import logging
 import sys
 from datetime import timedelta
 from pathlib import Path
+import re
 from typing import Optional, TextIO
 
 import aimrun
@@ -248,6 +249,14 @@ def main(cfg: TrainConfig) -> None:
     # Construct optimizer and learning rate scheduler.
     optim = build_optimizer(cfg, dist_model)
     scheduler = build_scheduler(cfg)
+
+    if cfg.model.freeze is not None:
+        log.info(f"Freezing model parameters: {cfg.model.freeze}")
+        for name, param in dist_model.named_parameters():
+            for pattern in cfg.model.freeze:
+                if re.match(pattern, name):
+                    param.requires_grad = False
+                    log.info(f"Froze parameter {name}")
 
     # Data indices file.
     indices_file: Optional[TextIO] = None
