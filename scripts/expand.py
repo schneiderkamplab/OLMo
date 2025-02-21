@@ -55,9 +55,6 @@ def main(
                 new_value = value.clone()
                 new_model_state_dict[new_key] = new_value
                 print(f"Cloned {key} to {new_key}")
-                if new_layer in added and parts[offset+1] in zero:
-                    new_value.zero_()
-                    print(f"Zeroed {new_key}")
             model_state_dict[key] = None
         else:
             new_model_state_dict[key] = value
