@@ -158,6 +158,17 @@ def main(cfg: TrainConfig) -> None:
         bitlinearize(olmo_model, replacements=[x.__dict__ for x in cfg.bitlinear])
         log.info(f"Bilinear model: {olmo_model}")
 
+    olmo_model.to(get_local_rank())
+    if cfg.model.freeze is not None:
+        log.info(f"Total number of trainable parameters before freezing: {count_trainable_params(olmo_model)}")
+        log.info(f"Freezing model parameters: {cfg.model.freeze}")
+        for name, param in olmo_model.named_parameters():
+            for pattern in cfg.model.freeze:
+                if re.match(pattern, name):
+                    param.requires_grad = False
+                    log.info(f"Froze parameter {name}")
+        log.info(f"Total number of trainable parameters after freezing: {count_trainable_params(olmo_model)}")
+
     # Compile one block at a time.
     if cfg.compile is not None:
         if cfg.model.block_group_size != 1:
@@ -249,16 +260,6 @@ def main(cfg: TrainConfig) -> None:
     log.info(f"Peak GPU Memory (MB) after {cfg.distributed_strategy}: {int(peak_gpu_memory() or 0)}")
     log.info("Model:")
     log.info(dist_model)
-
-    if cfg.model.freeze is not None:
-        log.info(f"Total number of trainable parameters before freezing: {count_trainable_params(olmo_model)}")
-        log.info(f"Freezing model parameters: {cfg.model.freeze}")
-        for name, param in olmo_model.named_parameters():
-            for pattern in cfg.model.freeze:
-                if re.match(pattern, name):
-                    param.requires_grad = False
-                    log.info(f"Froze parameter {name}")
-        log.info(f"Total number of trainable parameters after freezing: {count_trainable_params(olmo_model)}")
 
     # Construct optimizer and learning rate scheduler.
     optim = build_optimizer(cfg, dist_model)
