@@ -158,7 +158,6 @@ def main(cfg: TrainConfig) -> None:
         bitlinearize(olmo_model, replacements=[x.__dict__ for x in cfg.bitlinear])
         log.info(f"Bilinear model: {olmo_model}")
 
-    olmo_model.to(get_local_rank())
     if cfg.model.freeze is not None:
         log.info(f"Total number of trainable parameters before freezing: {count_trainable_params(olmo_model)}")
         log.info(f"Freezing model parameters: {cfg.model.freeze}")
