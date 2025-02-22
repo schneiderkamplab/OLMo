@@ -9,13 +9,21 @@ from olmo.safetensors_util import safetensors_file_to_state_dict, state_dict_to_
 
 logger = logging.getLogger(__name__)
 
+def init_normal(
+    tensor: torch.Tensor,
+    std: float = 0.02,
+    init_cutoff_factor: float = 3,
+):
+    cutoff_value = init_cutoff_factor * std
+    torch.nn.init.trunc_normal_(tensor, mean=0.0, std=std, a=-cutoff_value, b=cutoff_value)
+
 def main(
     input_dir: Union[str, Path],
     output_dir: Union[str, Path],
     safe_tensors: bool = False,
     every: int = 1,
     prefix: str = "transformer.blocks.",
-    zero: list[str] = ["attn_out", "ff_out"]
+    reset: bool = False,
 ) -> None:
     if isinstance(input_dir, str):
         input_dir = Path(input_dir)
@@ -55,6 +63,9 @@ def main(
                 new_value = value.clone()
                 new_model_state_dict[new_key] = new_value
                 print(f"Cloned {key} to {new_key}")
+                if reset and new_layer in added:
+                    init_normal(new_value)
+                    print(f"Reinitialized {new_key}")
             model_state_dict[key] = None
         else:
             new_model_state_dict[key] = value
@@ -86,7 +97,7 @@ def compute_mapping_added(n_layers, every):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(prog="unshard.py", description="Unshard sharded checkpoints on CPU")
+    parser = argparse.ArgumentParser(prog="unshard.py", description="Expand with additional layers")
     parser.add_argument("input_dir")
     parser.add_argument("output_dir")
     parser.add_argument(
@@ -104,9 +115,10 @@ if __name__ == "__main__":
         default="transformer.blocks.",
     )
     parser.add_argument(
-        "--zero",
-        nargs="+",
-        default=["attn_out", "ff_out"],
+        "--reset",
+        action="store_true",
+        default=False,
+        help="Reinitialize the weights of the added layers",
     )
     args = parser.parse_args()
 
@@ -117,5 +129,5 @@ if __name__ == "__main__":
         safe_tensors=args.safe_tensors,
         every=args.every,
         prefix=args.prefix,
-        zero=args.zero,
+        reset=args.reset,
     )
