@@ -36,9 +36,13 @@ def main(
     if safe_tensors:
         model_input = input_dir / "model.safetensors"
         model_output = str(output_dir / "model.safetensors")
+        train_input = input_dir / "train.safetensors"
+        train_output = str(output_dir / "train.safetensors")
     else:
         model_input = input_dir / "model.pt"
         model_output = str(output_dir / "model.pt")
+        train_input = input_dir / "train.pt"
+        train_output = str(output_dir / "train.pt")
 
     logger.info("Loading config from %s", config_input)
     with open(config_input, "rt") as f:
@@ -82,6 +86,18 @@ def main(
     else:
         torch.save(model_state_dict, model_output)
     del model_state_dict
+
+    logger.info("Loading trainer state from %s", train_input)
+    if safe_tensors:
+        trainer_state_dict = safetensors_file_to_state_dict(train_input)
+    else:
+        trainer_state_dict = torch.load(train_input, map_location="cpu")
+    logger.info("Saving trainer state to %s", train_output)
+    if safe_tensors:
+        state_dict_to_safetensors_file(trainer_state_dict, train_output)
+    else:
+        torch.save(trainer_state_dict, train_output)
+    del trainer_state_dict
 
 def compute_mapping_added(n_layers, every):
     mapping = list(range(n_layers))
