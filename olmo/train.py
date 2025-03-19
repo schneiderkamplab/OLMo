@@ -994,7 +994,7 @@ class Trainer:
             if value < 0.0001:
                 return str(value)  # scientific notation
             elif value > 1000:
-                return f"{int(value):,d}"
+                return f"{value:.0f}"
             elif value > 100:
                 return f"{value:.1f}"
             elif value > 10:

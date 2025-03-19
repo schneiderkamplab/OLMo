@@ -1,0 +1,575 @@
+run_name: Mimir-7B-cpt-fsdp
+seed: 9313
+dry_run: false
+
+aim:
+  repo: /leonardo/home/userexternal/jschneid/fast/OLMo/
+  experiment: ${run_name} # null to deactivate
+  sync_repo: null #aim://aim.caracal.imada.sdu.dk
+  sync_args:
+    repeat: 60
+    verbosity: 2
+  log_interval: 1
+
+model:
+  d_model: 4096
+  n_heads: 32
+  n_layers: 32
+  mlp_hidden_size: 22016
+  weight_tying: false
+  alibi: false
+  rope: true
+  rope_theta: 500000
+  flash_attention: true
+  attention_dropout: 0.0
+  include_bias: false
+  block_type: sequential
+  layer_norm_type: rms
+  layer_norm_with_affine: true
+  layer_norm_eps: 1e-6
+  bias_for_layer_norm: false
+  attention_layer_norm: true
+  attention_layer_norm_with_affine: true
+  norm_after: true
+  activation_type: swiglu
+  residual_dropout: 0.0
+  embedding_dropout: 0.0
+  max_sequence_length: 4096
+  vocab_size: 100278
+  embedding_size: 100352
+  eos_token_id: 100257
+  pad_token_id: 100277
+  init_device: meta
+  init_fn: normal
+  init_std: 0.02
+  init_cutoff_factor: 3
+
+softmax_auxiliary_loss: true
+auxiliary_loss_multiplier: 1e-5
+fused_loss: true
+
+compile:
+  mode: default
+
+optimizer:
+  name: adamw
+  learning_rate: 3.0e-4
+  weight_decay: 0.1
+  eps: 1e-8
+  decay_norm_and_bias: true
+  decay_embeddings: false
+  betas:
+  - 0.9
+  - 0.95
+  metrics_log_interval: 1
+
+scheduler:
+  name: cosine_with_warmup
+  units: tokens
+  t_warmup: 1048576000
+  t_max: 188913148400
+  alpha_f: 0.1
+  warmup_min_lr: 0.0
+
+tokenizer:
+  identifier: tokenizers/allenai_dolma2.json
+  truncate_direction: right
+
+save_folder: ${oc.env:SCRATCH}/Mimir/checkpoints/${run_name}-${oc.env:JOBID}
+save_overwrite: false
+
+save_interval: 1000
+save_interval_ephemeral: 250
+save_num_checkpoints_to_keep: -1
+sharded_checkpointer: olmo_core
+
+save_interval_unsharded: 250
+save_num_unsharded_checkpoints_to_keep: -1
+
+load_path: null
+
+max_duration: 1ep
+global_train_batch_size: 1024
+device_train_microbatch_size: 1
+
+precision: amp_bf16
+
+fsdp:
+  sharding_strategy: HYBRID_SHARD
+  wrapping_strategy: by_block_and_size
+  precision: mixed
+
+max_grad_norm: 1.0
+max_grad_norm_ratio: null
+
+speed_monitor:
+  window_size: 1
+
+gen1_gc_interval: 1
+
+eval_interval: 10000
+eval_subset_num_batches: -1
+device_eval_batch_size: ${device_train_microbatch_size}
+evaluators:
+  - label: all-small-ppl-validation
+    data:
+      num_workers: 1
+      drop_last: true
+      # generate_doc_lengths: true
+      memmap_dtype: uint32
+      datasets:
+        finewweb2_dan_test:
+          - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_test/part-0-00000.npy
+  #       c4_en-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/c4_en/val/part-0-00000.npy
+  #       dolma_books-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/dolma_books/val/part-0-00000.npy
+  #       dolma_common-crawl-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/dolma_common-crawl/val/part-0-00000.npy
+  #       dolma_pes2o-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/dolma_pes2o/val/part-0-00000.npy
+  #       dolma_reddit-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/dolma_reddit/val/part-0-00000.npy
+  #       dolma_stack-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/dolma_stack/val/part-0-00000.npy
+  #       dolma_wiki-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/dolma_wiki/val/part-0-00000.npy
+  #       ice-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/ice/val/part-0-00000.npy
+  #       m2d2_s2orc-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/m2d2_s2orc/val/part-0-00000.npy
+  #       pile-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/pile/val/part-0-00000.npy
+  #       wikitext_103-validation:
+  #         - http://olmo-data.org/eval-data/perplexity/v3_small_dolma2-tokenizer/wikitext_103/val/part-0-00000.npy
+
+  ##########################
+  # Downstream evaluations #
+  ##########################
+  - label: piqa
+    type: downstream
+
+  - label: hellaswag
+    type: downstream
+
+  - label: winogrande
+    type: downstream
+
+  - label: openbook_qa
+    type: downstream
+
+  - label: boolq
+    type: downstream
+
+  - label: sciq
+    type: downstream
+
+  - label: arc_easy
+    type: downstream
+
+  - label: arc_challenge
+    type: downstream
+
+  - label: copa
+    type: downstream
+
+  - label: commonsense_qa
+    type: downstream
+
+  - label: social_iqa
+    type: downstream
+
+  - label: mmlu_stem_var
+    type: downstream
+
+  - label: mmlu_humanities_var
+    type: downstream
+
+  - label: mmlu_social_sciences_var
+    type: downstream
+
+  - label: mmlu_other_var
+    type: downstream
+
+  - label: mmlu_stem_mc_5shot
+    type: downstream
+
+  - label: mmlu_humanities_mc_5shot
+    type: downstream
+
+  - label: mmlu_social_sciences_mc_5shot
+    type: downstream
+
+  - label: mmlu_other_mc_5shot
+    type: downstream
+
+  - label: mmlu_stem_mc_5shot_test
+    type: downstream
+
+  - label: mmlu_humanities_mc_5shot_test
+    type: downstream
+
+  - label: mmlu_social_sciences_mc_5shot_test
+    type: downstream
+
+  - label: mmlu_other_mc_5shot_test
+    type: downstream
+
+  - label: basic_arithmetic
+    type: downstream
+
+  - label: trivia_qa_wiki_ppl
+    type: downstream
+
+  - label: natural_qs_open_ppl
+    type: downstream
+
+  - label: arc_easy_ppl
+    type: downstream
+
+data:
+  pad_direction: right
+  # generate_doc_lengths: true
+  num_workers: 1
+  drop_last: true
+  pin_memory: true
+  prefetch_factor: 8
+  persistent_workers: true
+  memmap_dtype: uint32
+  timeout: 0
+  instance_filter:
+    repetition_max_period: 13
+    repetition_min_period: 1
+    repetition_max_count: 32
+  paths:
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-00-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-01-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-02-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-03-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-04-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-05-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-06-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-07-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-08-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-09-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-10-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-11-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-12-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-13-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-14-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-15-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-16-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-17-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-18-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-19-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-20-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-21-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-22-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-23-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-24-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-25-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-26-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-27-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-28-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-29-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-30-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-31-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-32-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-33-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-34-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-35-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-36-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-37-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-38-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-39-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-40-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-41-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-42-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-43-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-44-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-45-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-46-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-47-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-48-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-49-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-50-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-51-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-52-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-53-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-54-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-55-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-56-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-57-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-58-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-59-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-60-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-61-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-62-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_0M_50M/part-63-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-00-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-01-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-02-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-03-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-04-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-05-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-06-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-07-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-08-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-09-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-10-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-11-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-12-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-13-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-14-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-15-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-16-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-17-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-18-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-19-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-20-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-21-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-22-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-23-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-24-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-25-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-26-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-27-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-28-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-29-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-30-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-31-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-32-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-33-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-34-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-35-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-36-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-37-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-38-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-39-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-40-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-41-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-42-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-43-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-44-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-45-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-46-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-47-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-48-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-49-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-50-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-51-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-52-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-53-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-54-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-55-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-56-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-57-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-58-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-59-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-60-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-61-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-62-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_100M_150M/part-63-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-00-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-01-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-02-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-03-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-04-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-05-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-06-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-07-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-08-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-09-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-10-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-11-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-12-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-13-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-14-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-15-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-16-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-17-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-18-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-19-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-20-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-21-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-22-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-23-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-24-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-25-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-26-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-27-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-28-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-29-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-30-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-31-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-32-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-33-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-34-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-35-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-36-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-37-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-38-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-39-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-40-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-41-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-42-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-43-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-44-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-45-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-46-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-47-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-48-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-49-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-50-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-51-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-52-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-53-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-54-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-55-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-56-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-57-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-58-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-59-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-60-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-61-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-62-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/dolma/sliced_50M_100M/part-63-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-00-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-01-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-01-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-02-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-03-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-04-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-05-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-06-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-07-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-08-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-09-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-10-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-11-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-12-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-13-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-14-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-15-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-16-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-17-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-18-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-19-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-20-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-21-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-22-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-23-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-24-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-25-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-26-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-27-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-28-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-29-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-30-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-31-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-32-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-33-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-34-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-35-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-36-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-37-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-38-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-39-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-40-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-41-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-42-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-43-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-44-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-45-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-46-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-47-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-48-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-49-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-50-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-51-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-52-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-53-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-54-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-55-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-56-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-57-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-58-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-59-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-60-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-61-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-62-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/fineweb2_dan_train/part-63-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-00-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-01-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-02-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-03-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-03-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-04-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-05-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-06-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-07-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-08-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-09-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-09-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-10-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-11-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-12-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-13-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-14-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-15-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-16-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-16-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-17-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-18-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-19-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-20-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-21-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-22-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-22-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-23-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-24-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-25-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-26-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-27-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-28-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-28-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-29-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-30-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-31-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-32-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-33-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-34-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-35-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-35-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-36-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-37-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-38-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-39-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-40-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-41-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-41-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-42-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-43-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-44-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-45-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-46-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-47-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-47-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-48-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-49-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-50-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-51-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-52-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-53-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-54-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-54-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-55-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-56-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-57-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-58-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-59-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-60-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-60-00001.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-61-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-62-00000.npy
+    - ${oc.env:SCRATCH}/Mimir/data/hplt2_dan/part-63-00000.npy
